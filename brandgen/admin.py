@@ -103,10 +103,11 @@ class UsageEventAdmin(admin.ModelAdmin):
             },
         )
 
-    def changelist_view(self, request, extra_context=None):
-        extra_context = extra_context or {}
-        extra_context["analytics_dashboard_url"] = reverse("admin:brandgen_usage_dashboard")
-        return super().changelist_view(request, extra_context=extra_context)
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_staff
+
+    def has_module_permission(self, request):
+        return request.user.is_staff
 
     def has_add_permission(self, request):
         return False
@@ -118,3 +119,8 @@ class UsageEventAdmin(admin.ModelAdmin):
         return obj.summary
 
     summary.short_description = "What"
+
+
+admin.site.site_header = "BrandGen Admin"
+admin.site.site_title = "BrandGen Admin"
+admin.site.index_title = "Site administration"
