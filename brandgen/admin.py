@@ -1,6 +1,9 @@
 from django.contrib import admin
+from django.shortcuts import render
+from django.urls import path, reverse
 
 from brandgen.models import Brand, PipelineJob, PostSlide, SiteImage, SocialPost, UsageEvent
+from brandgen.services.usage_stats import dashboard_stats
 
 
 class SiteImageInline(admin.TabularInline):
@@ -44,6 +47,8 @@ class PipelineJobAdmin(admin.ModelAdmin):
 
 @admin.register(UsageEvent)
 class UsageEventAdmin(admin.ModelAdmin):
+    change_list_template = "admin/brandgen/usageevent/change_list.html"
+
     list_display = (
         "created_at",
         "event_type",
@@ -71,6 +76,37 @@ class UsageEventAdmin(admin.ModelAdmin):
         "payload",
     )
     date_hierarchy = "created_at"
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "dashboard/",
+                self.admin_site.admin_view(self.analytics_dashboard),
+                name="brandgen_usage_dashboard",
+            ),
+        ]
+        return custom + urls
+
+    def analytics_dashboard(self, request):
+        days = int(request.GET.get("days", 7))
+        days = max(1, min(days, 90))
+        stats = dashboard_stats(days=days)
+        return render(
+            request,
+            "brandgen/usage_dashboard.html",
+            {
+                "stats": stats,
+                "days": days,
+                "from_admin": True,
+                "admin_usage_url": reverse("admin:brandgen_usageevent_changelist"),
+            },
+        )
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context["analytics_dashboard_url"] = reverse("admin:brandgen_usage_dashboard")
+        return super().changelist_view(request, extra_context=extra_context)
 
     def has_add_permission(self, request):
         return False

@@ -4,6 +4,9 @@
 <section class="section">
   <p class="kicker">Private analytics</p>
   <h1>Usage dashboard</h1>
+  {% if from_admin %}
+    <p class="lede"><a href="{{ admin_usage_url|default:'/admin/brandgen/usageevent/' }}">← Back to admin</a></p>
+  {% endif %}
   <p class="lede">Last {{ days }} day(s) · no API keys stored · anonymous session IDs only</p>
 
   <div class="stats-grid">

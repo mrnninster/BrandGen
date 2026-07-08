@@ -375,7 +375,15 @@ def usage_dashboard(request: HttpRequest) -> HttpResponse:
     token = settings.ANALYTICS_DASHBOARD_TOKEN
     if not token or request.GET.get("token") != token:
         return HttpResponse("Unauthorized", status=401)
+    return _render_usage_dashboard(request)
+
+
+def _render_usage_dashboard(request: HttpRequest, *, from_admin: bool = False) -> HttpResponse:
     days = int(request.GET.get("days", 7))
     days = max(1, min(days, 90))
     stats = dashboard_stats(days=days)
-    return render(request, "brandgen/usage_dashboard.html", {"stats": stats, "days": days})
+    return render(
+        request,
+        "brandgen/usage_dashboard.html",
+        {"stats": stats, "days": days, "from_admin": from_admin},
+    )
