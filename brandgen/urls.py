@@ -12,4 +12,5 @@ urlpatterns = [
     path("api-key/clear/", views.api_key_clear, name="api_key_clear"),
     path("jobs/<uuid:job_id>/", views.job_progress, name="job_progress"),
     path("api/jobs/<uuid:job_id>/", views.job_progress_api, name="job_progress_api"),
+    path("usage/", views.usage_dashboard, name="usage_dashboard"),
 ]

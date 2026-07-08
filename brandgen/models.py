@@ -212,3 +212,80 @@ class PipelineJob(models.Model):
         if self.job_type == self.JobType.GENERATE and self.post_id:
             return f"/posts/{self.post_id}/"
         return None
+
+
+class UsageEvent(models.Model):
+    """Anonymous usage analytics — no API keys, no user accounts."""
+
+    class EventType(models.TextChoices):
+        CRAWL_STARTED = "crawl_started", "Crawl started"
+        CRAWL_COMPLETED = "crawl_completed", "Crawl completed"
+        CRAWL_FAILED = "crawl_failed", "Crawl failed"
+        GENERATE_STARTED = "generate_started", "Generate started"
+        GENERATE_COMPLETED = "generate_completed", "Generate completed"
+        GENERATE_FAILED = "generate_failed", "Generate failed"
+        POST_APPROVED = "post_approved", "Post approved"
+        POST_SKIPPED = "post_skipped", "Post skipped"
+        REGENERATE_STARTED = "regenerate_started", "Regenerate started"
+        REFINE_STARTED = "refine_started", "Refine started"
+        API_KEY_SET = "api_key_set", "Visitor API key set"
+        API_KEY_CLEARED = "api_key_cleared", "Visitor API key cleared"
+        SLIDE_DOWNLOAD = "slide_download", "Slide downloaded"
+
+    class BillingMode(models.TextChoices):
+        USER = "user", "Visitor key"
+        DEMO = "demo", "Demo / server key"
+        UNKNOWN = "unknown", "Unknown"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    visitor_session = models.CharField(max_length=64, db_index=True)
+    event_type = models.CharField(max_length=40, choices=EventType.choices, db_index=True)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    ip_address = models.GenericIPAddressField(null=True, blank=True, db_index=True)
+    user_agent = models.CharField(max_length=500, blank=True)
+    path = models.CharField(max_length=300, blank=True)
+
+    billing_mode = models.CharField(
+        max_length=20,
+        choices=BillingMode.choices,
+        default=BillingMode.UNKNOWN,
+        db_index=True,
+    )
+    website_url = models.URLField(max_length=500, blank=True)
+    website_domain = models.CharField(max_length=200, blank=True, db_index=True)
+
+    brand = models.ForeignKey(Brand, null=True, blank=True, on_delete=models.SET_NULL)
+    post = models.ForeignKey(SocialPost, null=True, blank=True, on_delete=models.SET_NULL)
+    job = models.ForeignKey(PipelineJob, null=True, blank=True, on_delete=models.SET_NULL)
+
+    payload = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["-created_at", "event_type"]),
+            models.Index(fields=["website_domain", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        who = self.website_domain or self.visitor_session[:8]
+        return f"{self.event_type} · {who} · {self.created_at:%Y-%m-%d %H:%M}"
+
+    @property
+    def summary(self) -> str:
+        p = self.payload or {}
+        parts = []
+        if self.website_domain:
+            parts.append(self.website_domain)
+        if p.get("brand_name"):
+            parts.append(p["brand_name"])
+        if p.get("platform"):
+            parts.append(p["platform"])
+        if p.get("post_type"):
+            parts.append(p["post_type"])
+        if p.get("slide_count"):
+            parts.append(f"{p['slide_count']} slide(s)")
+        if p.get("status"):
+            parts.append(p["status"])
+        return " · ".join(parts) or self.get_event_type_display()

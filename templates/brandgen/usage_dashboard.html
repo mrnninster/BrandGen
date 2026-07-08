@@ -1,0 +1,122 @@
+{% extends "brandgen/base.html" %}
+{% block title %}Usage dashboard · BrandGen{% endblock %}
+{% block content %}
+<section class="section">
+  <p class="kicker">Private analytics</p>
+  <h1>Usage dashboard</h1>
+  <p class="lede">Last {{ days }} day(s) · no API keys stored · anonymous session IDs only</p>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <span class="stat-label">Total events</span>
+      <strong class="stat-value">{{ stats.total_events }}</strong>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Unique visitors (sessions)</span>
+      <strong class="stat-value">{{ stats.unique_sessions }}</strong>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Unique IPs</span>
+      <strong class="stat-value">{{ stats.unique_ips }}</strong>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Crawl activity</span>
+      <strong class="stat-value">{{ stats.crawls }}</strong>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Images started</span>
+      <strong class="stat-value">{{ stats.images_started }}</strong>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Images OK / failed</span>
+      <strong class="stat-value">{{ stats.images_ok }} / {{ stats.images_fail }}</strong>
+    </div>
+  </div>
+</section>
+
+<section class="section split usage-split">
+  <div>
+    <h2>By event type</h2>
+    <table class="usage-table">
+      <thead><tr><th>Event</th><th>Count</th></tr></thead>
+      <tbody>
+        {% for row in stats.by_type %}
+          <tr><td>{{ row.event_type }}</td><td>{{ row.count }}</td></tr>
+        {% empty %}
+          <tr><td colspan="2" class="muted">No data yet</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h2>Billing mode</h2>
+    <table class="usage-table">
+      <thead><tr><th>Mode</th><th>Events</th></tr></thead>
+      <tbody>
+        {% for row in stats.by_billing %}
+          <tr><td>{{ row.billing_mode }}</td><td>{{ row.count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h2>Platform / post type</h2>
+    <table class="usage-table">
+      <thead><tr><th>Platform</th><th>Count</th></tr></thead>
+      <tbody>
+        {% for row in stats.by_platform %}
+          <tr><td>{{ row.payload__platform|default:"—" }}</td><td>{{ row.count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <table class="usage-table">
+      <thead><tr><th>Post type</th><th>Count</th></tr></thead>
+      <tbody>
+        {% for row in stats.by_post_type %}
+          <tr><td>{{ row.payload__post_type|default:"—" }}</td><td>{{ row.count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div>
+    <h2>Top websites crawled / generated for</h2>
+    <table class="usage-table">
+      <thead><tr><th>Domain</th><th>Events</th></tr></thead>
+      <tbody>
+        {% for row in stats.by_domain %}
+          <tr><td>{{ row.website_domain }}</td><td>{{ row.count }}</td></tr>
+        {% empty %}
+          <tr><td colspan="2" class="muted">No domains yet</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h2>Daily volume</h2>
+    <table class="usage-table">
+      <thead><tr><th>Day</th><th>Events</th></tr></thead>
+      <tbody>
+        {% for row in stats.daily %}
+          <tr><td>{{ row.day }}</td><td>{{ row.count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section">
+  <h2>Recent activity</h2>
+  <div class="usage-feed">
+    {% for e in stats.recent %}
+      <article class="usage-row">
+        <time>{{ e.created_at }}</time>
+        <strong>{{ e.get_event_type_display }}</strong>
+        <span>{{ e.summary }}</span>
+        <span class="chip chip-tiny">{{ e.get_billing_mode_display }}</span>
+        {% if e.ip_address %}<span class="muted mono">{{ e.ip_address }}</span>{% endif %}
+        <span class="muted mono">{{ e.visitor_session|slice:":8" }}…</span>
+      </article>
+    {% empty %}
+      <p class="muted">No events recorded yet.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

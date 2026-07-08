@@ -8,6 +8,7 @@ import threading
 from django.db import close_old_connections
 
 from brandgen.models import Brand, PipelineJob, SocialPost
+from brandgen.services.analytics import track_job_finished
 from brandgen.services.api_keys import clamp_slide_count, resolve_api_key
 from brandgen.services.pipeline import generate_post, ingest_website
 from brandgen.services.progress import (
@@ -74,6 +75,7 @@ def create_generate_job(
 
 def _run_ingest(job_id) -> None:
     close_old_connections()
+    job = None
     try:
         job = PipelineJob.objects.get(pk=job_id)
         progress = JobProgress(job)
@@ -86,11 +88,14 @@ def _run_ingest(job_id) -> None:
             progress=progress,
             api_key=api_key,
         )
+        job.refresh_from_db()
+        track_job_finished(job, success=True)
     except Exception as exc:  # noqa: BLE001
         logger.exception("Ingest job %s failed", job_id)
         try:
-            job = PipelineJob.objects.get(pk=job_id)
+            job = job or PipelineJob.objects.get(pk=job_id)
             JobProgress(job).fail(str(exc))
+            track_job_finished(job, success=False, error=str(exc))
         except Exception:  # noqa: BLE001
             pass
     finally:
@@ -99,6 +104,7 @@ def _run_ingest(job_id) -> None:
 
 def _run_generate(job_id) -> None:
     close_old_connections()
+    job = None
     try:
         job = PipelineJob.objects.get(pk=job_id)
         progress = JobProgress(job)
@@ -119,16 +125,19 @@ def _run_generate(job_id) -> None:
             existing_post=job.post,
             api_key=api_key,
         )
+        job.refresh_from_db()
+        track_job_finished(job, success=True)
     except Exception as exc:  # noqa: BLE001
         logger.exception("Generate job %s failed", job_id)
         try:
-            job = PipelineJob.objects.get(pk=job_id)
+            job = job or PipelineJob.objects.get(pk=job_id)
             if job.post_id:
                 SocialPost.objects.filter(pk=job.post_id).update(
                     status=SocialPost.Status.FAILED,
                     error_message=str(exc),
                 )
             JobProgress(job).fail(str(exc))
+            track_job_finished(job, success=False, error=str(exc))
         except Exception:  # noqa: BLE001
             pass
     finally:

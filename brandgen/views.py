@@ -1,11 +1,13 @@
 from django import forms
+from django.conf import settings
 from django.contrib import messages
 from django.http import FileResponse, HttpRequest, HttpResponse, HttpResponseNotFound, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from brandgen.models import Brand, PipelineJob, PostSlide, SocialPost
+from brandgen.models import Brand, PipelineJob, PostSlide, SocialPost, UsageEvent
+from brandgen.services.analytics import request_context, track, track_job_started
 from brandgen.services.api_keys import (
     clamp_slide_count,
     clear_user_api_key,
@@ -14,6 +16,7 @@ from brandgen.services.api_keys import (
     session_key_status,
     set_user_api_key,
 )
+from brandgen.services.usage_stats import dashboard_stats
 from brandgen.services.jobs import (
     create_generate_job,
     create_ingest_job,
@@ -78,7 +81,15 @@ class ApiKeyForm(forms.Form):
 
 
 def _job_params(request: HttpRequest) -> dict:
-    return job_api_params(request.session)
+    return {**job_api_params(request.session), **request_context(request)}
+
+
+def _billing_mode(request: HttpRequest) -> str:
+    return (
+        UsageEvent.BillingMode.USER
+        if get_user_api_key(request.session)
+        else UsageEvent.BillingMode.DEMO
+    )
 
 
 def _resolve_slide_count(form: GenerateForm, request: HttpRequest, post_type: str) -> int:
@@ -110,6 +121,12 @@ def home(request: HttpRequest) -> HttpResponse:
                 use_vision=use_vision,
                 job_params=_job_params(request),
             )
+            track_job_started(
+                request,
+                job,
+                website_url=form.cleaned_data["url"],
+                billing_mode=_billing_mode(request),
+            )
             start_job_thread(job)
             return redirect("job_progress", job_id=job.id)
 
@@ -140,6 +157,12 @@ def brand_detail(request: HttpRequest, brand_id) -> HttpResponse:
                 post_type=post_type,
                 slide_count=slide_count,
                 job_params=_job_params(request),
+            )
+            track_job_started(
+                request,
+                job,
+                website_url=brand.url,
+                billing_mode=_billing_mode(request),
             )
             start_job_thread(job)
             return redirect("job_progress", job_id=job.id)
@@ -183,11 +206,27 @@ def post_action(request: HttpRequest, post_id) -> HttpResponse:
     if action == "approve":
         post.status = SocialPost.Status.APPROVED
         post.save(update_fields=["status", "updated_at"])
+        track(
+            request,
+            UsageEvent.EventType.POST_APPROVED,
+            billing_mode=_billing_mode(request),
+            brand=post.brand,
+            post=post,
+            website_url=post.brand.url,
+        )
         messages.success(request, "Post approved.")
         return redirect("brand_detail", brand_id=post.brand_id)
     if action == "skip":
         post.status = SocialPost.Status.SKIPPED
         post.save(update_fields=["status", "updated_at"])
+        track(
+            request,
+            UsageEvent.EventType.POST_SKIPPED,
+            billing_mode=_billing_mode(request),
+            brand=post.brand,
+            post=post,
+            website_url=post.brand.url,
+        )
         messages.info(request, "Post skipped — back to brand kit.")
         return redirect("brand_detail", brand_id=post.brand_id)
     if action in {"regenerate", "refine"}:
@@ -207,6 +246,14 @@ def post_action(request: HttpRequest, post_id) -> HttpResponse:
             slide_count=slide_count,
             job_params=_job_params(request),
         )
+        track_job_started(
+            request,
+            job,
+            website_url=post.brand.url,
+            billing_mode=_billing_mode(request),
+            extra={"action": "regenerate"},
+        )
+        track(request, UsageEvent.EventType.REGENERATE_STARTED, brand=post.brand, post=post, job=job, website_url=post.brand.url, billing_mode=_billing_mode(request))
         start_job_thread(job)
         return redirect("job_progress", job_id=job.id)
     if action == "refine":
@@ -224,6 +271,23 @@ def post_action(request: HttpRequest, post_id) -> HttpResponse:
                 refine_instruction=form.cleaned_data["instruction"],
                 job_params=_job_params(request),
             )
+            track_job_started(
+                request,
+                job,
+                website_url=post.brand.url,
+                billing_mode=_billing_mode(request),
+                extra={"action": "refine", "instruction_preview": form.cleaned_data["instruction"][:120]},
+            )
+            track(
+                request,
+                UsageEvent.EventType.REFINE_STARTED,
+                brand=post.brand,
+                post=post,
+                job=job,
+                website_url=post.brand.url,
+                billing_mode=_billing_mode(request),
+                payload={"instruction_preview": form.cleaned_data["instruction"][:200]},
+            )
             start_job_thread(job)
             return redirect("job_progress", job_id=job.id)
         messages.error(request, "Enter a refine instruction.")
@@ -237,6 +301,7 @@ def api_key_set(request: HttpRequest) -> HttpResponse:
     if form.is_valid():
         try:
             set_user_api_key(request.session, form.cleaned_data["api_key"])
+            track(request, UsageEvent.EventType.API_KEY_SET, billing_mode=UsageEvent.BillingMode.USER)
             messages.success(
                 request,
                 "Your OpenAI API key is saved for this browser session. "
@@ -252,6 +317,7 @@ def api_key_set(request: HttpRequest) -> HttpResponse:
 @require_POST
 def api_key_clear(request: HttpRequest) -> HttpResponse:
     clear_user_api_key(request.session)
+    track(request, UsageEvent.EventType.API_KEY_CLEARED, billing_mode=UsageEvent.BillingMode.DEMO)
     messages.info(request, "Your API key was removed. Demo mode: 1 image per generation run.")
     next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("home")
     return redirect(next_url)
@@ -262,6 +328,15 @@ def slide_download(request: HttpRequest, slide_id) -> HttpResponse:
     slide = get_object_or_404(PostSlide.objects.select_related("post", "post__brand"), pk=slide_id)
     if not slide.image:
         return HttpResponseNotFound("Slide image not found")
+    track(
+        request,
+        UsageEvent.EventType.SLIDE_DOWNLOAD,
+        billing_mode=_billing_mode(request),
+        brand=slide.post.brand,
+        post=slide.post,
+        website_url=slide.post.brand.url,
+        payload={"slide_index": slide.index, "headline": slide.headline[:120]},
+    )
     return FileResponse(
         slide.image.open("rb"),
         as_attachment=True,
@@ -293,3 +368,14 @@ def job_progress(request: HttpRequest, job_id) -> HttpResponse:
 def job_progress_api(request: HttpRequest, job_id) -> JsonResponse:
     job = get_object_or_404(PipelineJob, pk=job_id)
     return JsonResponse(job.to_progress_dict())
+
+
+@require_GET
+def usage_dashboard(request: HttpRequest) -> HttpResponse:
+    token = settings.ANALYTICS_DASHBOARD_TOKEN
+    if not token or request.GET.get("token") != token:
+        return HttpResponse("Unauthorized", status=401)
+    days = int(request.GET.get("days", 7))
+    days = max(1, min(days, 90))
+    stats = dashboard_stats(days=days)
+    return render(request, "brandgen/usage_dashboard.html", {"stats": stats, "days": days})

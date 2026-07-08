@@ -16,6 +16,7 @@ env = environ.Env(
     OPENAI_IMAGE_MODEL=(str, "gpt-image-1"),
     OPENAI_TEXT_MODEL=(str, "gpt-4o-mini"),
     DEMO_MAX_SLIDES=(int, 1),
+    ANALYTICS_DASHBOARD_TOKEN=(str, ""),
 )
 environ.Env.read_env(BASE_DIR / ".env")
 
@@ -27,6 +28,7 @@ OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
 OPENAI_IMAGE_MODEL = env("OPENAI_IMAGE_MODEL")
 OPENAI_TEXT_MODEL = env("OPENAI_TEXT_MODEL")
 DEMO_MAX_SLIDES = env("DEMO_MAX_SLIDES")
+ANALYTICS_DASHBOARD_TOKEN = env("ANALYTICS_DASHBOARD_TOKEN")
 
 # User API keys live in the session only — cleared when the browser closes.
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True

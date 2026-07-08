@@ -40,6 +40,24 @@ Visitors can paste their own OpenAI API key in the header bar. It is stored **on
 
 Keys are passed to background jobs only for the duration of that job and are never returned in API responses.
 
+## Usage analytics
+
+Every action is logged to `UsageEvent` — **never** API keys:
+
+| Tracked | Examples |
+|---|---|
+| **When** | Timestamp, job duration |
+| **Where** | IP address, page path, anonymous session ID |
+| **What** | Website domain crawled, platform, post type, slide count, approve/skip/download, demo vs visitor key |
+
+**Dashboard** (set `ANALYTICS_DASHBOARD_TOKEN` in `.env`):
+
+```
+http://127.0.0.1:8000/usage/?token=YOUR_TOKEN
+```
+
+Also browse events in Django admin → Usage events.
+
 ## PoC flow
 
 1. Enter a website URL on the home page.
