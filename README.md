@@ -58,6 +58,10 @@ http://127.0.0.1:8000/usage/?token=YOUR_TOKEN
 
 Also browse events in Django admin → Usage events.
 
+## Deploy on Render
+
+See [DEPLOY_RENDER.md](DEPLOY_RENDER.md) for Postgres, persistent media disk, and one-click Blueprint deploy via `render.yaml`.
+
 ## PoC flow
 
 1. Enter a website URL on the home page.

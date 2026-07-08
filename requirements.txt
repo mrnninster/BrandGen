@@ -12,3 +12,4 @@ cairosvg>=2.7
 whitenoise>=6.6
 dj-database-url>=2.1
 psycopg2-binary>=2.9
+gunicorn>=22.0

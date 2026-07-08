@@ -18,7 +18,6 @@ env = environ.Env(
     OPENAI_TEXT_MODEL=(str, "gpt-4o-mini"),
     DEMO_MAX_SLIDES=(int, 1),
     ANALYTICS_DASHBOARD_TOKEN=(str, ""),
-    VERCEL=(bool, False),
 )
 environ.Env.read_env(BASE_DIR / ".env")
 
@@ -26,12 +25,9 @@ SECRET_KEY = env("DJANGO_SECRET_KEY", default="dev-insecure-secret-key")
 DEBUG = env("DJANGO_DEBUG")
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
-# Vercel preview/production hostnames
-if env.bool("VERCEL", default=False):
-    ALLOWED_HOSTS = ["*"]
-    DEBUG = False
-
-VERCEL = env.bool("VERCEL", default=False)
+_render_host = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
+if _render_host and _render_host not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_render_host)
 
 OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
 OPENAI_IMAGE_MODEL = env("OPENAI_IMAGE_MODEL")
@@ -85,7 +81,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-# Database — Postgres on Vercel (DATABASE_URL), SQLite locally
+# Database — Postgres when DATABASE_URL is set (Render), SQLite locally
 if env("DATABASE_URL", default=""):
     import dj_database_url
 
@@ -131,20 +127,19 @@ STORAGES = {
 }
 
 MEDIA_URL = "media/"
-MEDIA_ROOT = BASE_DIR / "media"
-
-# On Vercel the filesystem is ephemeral — generated images won't persist across deploys.
-if VERCEL:
-    MEDIA_ROOT = Path("/tmp/brandgen-media")
+_media_root = os.environ.get("MEDIA_ROOT")
+MEDIA_ROOT = Path(_media_root) if _media_root else BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
 
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
-_vercel_url = os.environ.get("VERCEL_URL")
-if _vercel_url:
-    CSRF_TRUSTED_ORIGINS.append(f"https://{_vercel_url}")
+_render_url = os.environ.get("RENDER_EXTERNAL_URL")
+if _render_url:
+    origin = _render_url.rstrip("/")
+    if origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(origin)
 
 if not DEBUG:
     SESSION_COOKIE_SECURE = True

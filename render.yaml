@@ -1,0 +1,49 @@
+# Render Blueprint — deploy from the Render dashboard: New → Blueprint → connect repo.
+# Set root directory to `ivan_demo` if the repository root is the parent folder.
+
+databases:
+  - name: brandgen-db
+    plan: free
+    databaseName: brandgen
+    user: brandgen
+
+services:
+  - type: web
+    name: brandgen
+    runtime: python
+    plan: free
+    buildCommand: "./build.sh"
+    startCommand: >-
+      gunicorn config.wsgi:application
+      --bind 0.0.0.0:$PORT
+      --workers 2
+      --timeout 300
+      --graceful-timeout 30
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: brandgen-db
+          property: connectionString
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANALYTICS_DASHBOARD_TOKEN
+        generateValue: true
+      - key: DEMO_MAX_SLIDES
+        value: "1"
+      - key: MEDIA_ROOT
+        value: /var/data/media
+      - key: OPENAI_IMAGE_MODEL
+        value: gpt-image-1
+      - key: OPENAI_TEXT_MODEL
+        value: gpt-4o-mini
+    disk:
+      name: brandgen-media
+      mountPath: /var/data/media
+      sizeGB: 1

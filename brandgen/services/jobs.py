@@ -145,16 +145,7 @@ def _run_generate(job_id) -> None:
 
 
 def start_job_thread(job: PipelineJob) -> None:
-    """Run pipeline jobs. On Vercel, execute inline (no background threads)."""
-    import os
-
-    if os.environ.get("VERCEL"):
-        if job.job_type == PipelineJob.JobType.INGEST:
-            _run_ingest(job.id)
-        else:
-            _run_generate(job.id)
-        return
-
+    """Run pipeline jobs in a background thread."""
     target = _run_ingest if job.job_type == PipelineJob.JobType.INGEST else _run_generate
     thread = threading.Thread(
         target=target,
