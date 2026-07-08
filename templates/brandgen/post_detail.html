@@ -1,0 +1,149 @@
+{% extends "brandgen/base.html" %}
+{% block title %}Post review · {{ post.brand.name }}{% endblock %}
+{% block content %}
+<section class="section brand-head">
+  <div>
+    <p class="kicker">{{ post.get_platform_display }} preview · {{ post.get_status_display }}</p>
+    <h1>{{ post.get_post_type_display }}</h1>
+    <p class="lede"><a href="{% url 'brand_detail' post.brand.id %}">← {{ post.brand.name }}</a></p>
+  </div>
+</section>
+
+<section class="section preview-layout">
+  <div class="platform-frame platform-{{ post.platform }}">
+    <header class="pf-header">
+      {% if post.brand.logo %}
+        <img src="{{ post.brand.logo.url }}" alt="">
+      {% else %}
+        <span class="avatar">{{ post.brand.name|first }}</span>
+      {% endif %}
+      <div>
+        <strong>{{ post.brand.name }}</strong>
+        <span>Sponsored · {{ post.get_platform_display }}</span>
+      </div>
+    </header>
+
+    {% if post.caption %}
+      <p class="pf-caption">{{ post.caption }}</p>
+    {% endif %}
+
+    <div class="pf-carousel">
+      {% for slide in slides %}
+        {% if slide.image %}
+          <figure class="pf-slide">
+            <button
+              type="button"
+              class="slide-preview-btn"
+              data-preview-src="{{ slide.image.url }}"
+              data-preview-title="Slide {{ forloop.counter }} · {{ slide.headline }}"
+              data-download-url="{% url 'slide_download' slide.id %}"
+              aria-label="Preview slide {{ forloop.counter }}"
+            >
+              <img src="{{ slide.image.url }}" alt="{{ slide.headline }}">
+            </button>
+            <figcaption>
+              <span>Slide {{ forloop.counter }} · {{ slide.headline }}</span>
+              {% if slide.overlay_mode %}
+                <span class="chip chip-tiny">{{ slide.overlay_mode }}</span>
+              {% endif %}
+            </figcaption>
+            <div class="slide-actions">
+              <button
+                type="button"
+                class="btn btn-sm slide-preview-btn"
+                data-preview-src="{{ slide.image.url }}"
+                data-preview-title="Slide {{ forloop.counter }} · {{ slide.headline }}"
+                data-download-url="{% url 'slide_download' slide.id %}"
+              >Preview</button>
+              <a class="btn btn-sm" href="{% url 'slide_download' slide.id %}">Download</a>
+            </div>
+          </figure>
+        {% endif %}
+      {% empty %}
+        <p class="muted">No slides yet{% if post.error_message %} — {{ post.error_message }}{% endif %}</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <aside class="actions-panel">
+    <h2>Review</h2>
+    <form method="post" action="{% url 'post_action' post.id %}" class="action-row">
+      {% csrf_token %}
+      <button name="action" value="approve" class="btn btn-primary">Approve</button>
+      <button name="action" value="skip" class="btn">Skip</button>
+      <button name="action" value="regenerate" class="btn">Regenerate</button>
+    </form>
+    <p class="hint">Skip marks this post as skipped and returns you to the brand kit.</p>
+
+    <h2>Conversational refine</h2>
+    <form method="post" action="{% url 'post_action' post.id %}">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="refine">
+      {{ refine_form.instruction }}
+      <button type="submit" class="btn btn-primary">Refine &amp; regenerate</button>
+    </form>
+
+    {% if post.prompt_meta.design_tokens %}
+      <h2>Design tokens used</h2>
+      <pre class="code">{{ post.design_tokens_json }}</pre>
+    {% endif %}
+  </aside>
+</section>
+
+<div class="lightbox" id="lightbox" hidden>
+  <button type="button" class="lightbox-backdrop" id="lightbox-close-bg" aria-label="Close preview"></button>
+  <div class="lightbox-panel" role="dialog" aria-modal="true" aria-labelledby="lightbox-title">
+    <header class="lightbox-head">
+      <strong id="lightbox-title">Preview</strong>
+      <div class="lightbox-head-actions">
+        <a class="btn btn-sm" id="lightbox-download" href="#" download>Download</a>
+        <button type="button" class="btn btn-sm" id="lightbox-close">Close</button>
+      </div>
+    </header>
+    <img id="lightbox-image" src="" alt="">
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const lightbox = document.getElementById("lightbox");
+  if (!lightbox) return;
+  const img = document.getElementById("lightbox-image");
+  const title = document.getElementById("lightbox-title");
+  const download = document.getElementById("lightbox-download");
+  const closers = [
+    document.getElementById("lightbox-close"),
+    document.getElementById("lightbox-close-bg"),
+  ];
+
+  function openPreview(src, label, downloadUrl) {
+    img.src = src;
+    img.alt = label || "Generated slide";
+    title.textContent = label || "Preview";
+    download.href = downloadUrl || src;
+    lightbox.hidden = false;
+    document.body.classList.add("lightbox-open");
+  }
+
+  function closePreview() {
+    lightbox.hidden = true;
+    img.src = "";
+    document.body.classList.remove("lightbox-open");
+  }
+
+  document.querySelectorAll(".slide-preview-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      openPreview(btn.dataset.previewSrc, btn.dataset.previewTitle, btn.dataset.downloadUrl);
+    });
+  });
+  closers.forEach(function (el) {
+    if (el) el.addEventListener("click", closePreview);
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !lightbox.hidden) closePreview();
+  });
+})();
+</script>
+{% endblock %}

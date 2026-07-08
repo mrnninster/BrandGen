@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}BrandGen{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <div class="grain"></div>
+  <header class="topbar">
+    <a class="brand-mark" href="{% url 'home' %}">BrandGen</a>
+    <span class="eyebrow">PoC · crawl → kit → OpenAI images</span>
+  </header>
+
+  <section class="api-key-bar shell" id="top">
+    {% if api_key.has_user_key %}
+      <div class="api-key-status api-key-status-own">
+        <strong>Your OpenAI key</strong>
+        <span class="muted">Active {{ api_key.key_hint }} · unlimited until you close this browser</span>
+      </div>
+      <form method="post" action="{% url 'api_key_clear' %}" class="api-key-form">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <button type="submit" class="btn btn-sm">Remove key</button>
+      </form>
+    {% else %}
+      <div class="api-key-status api-key-status-demo">
+        <strong>Demo mode</strong>
+        <span class="muted">
+          {% if api_key.server_key_available %}
+            {{ api_key.demo_max_slides }} image per generation run on our server key
+          {% else %}
+            Server demo key not configured — add your own key to generate
+          {% endif %}
+        </span>
+      </div>
+      <form method="post" action="{% url 'api_key_set' %}" class="api-key-form">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <input
+          type="password"
+          name="api_key"
+          class="input api-key-input"
+          placeholder="sk-… paste your OpenAI key"
+          autocomplete="off"
+          required
+        >
+        <button type="submit" class="btn btn-primary btn-sm">Use my key</button>
+      </form>
+    {% endif %}
+  </section>
+
+  {% if messages %}
+  <div class="flash-wrap">
+    {% for message in messages %}
+      <div class="flash flash-{{ message.tags }}">{{ message }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <main class="shell">
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

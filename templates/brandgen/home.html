@@ -1,0 +1,50 @@
+{% extends "brandgen/base.html" %}
+{% block title %}BrandGen · Enter a website{% endblock %}
+{% block content %}
+<section class="hero">
+  <p class="kicker">From any URL</p>
+  <h1>Turn a website into on-brand social graphics</h1>
+  <p class="lede">
+    Crawl the site, extract colors / fonts / logo, synthesize a unique design system,
+    then generate OpenAI images with programmatic logo + headline overlays.
+  </p>
+
+  <form method="post" class="crawl-form">
+    {% csrf_token %}
+    <label class="label" for="id_url">Website URL</label>
+    {{ form.url }}
+    {% if form.url.errors %}<p class="error">{{ form.url.errors|striptags }}</p>{% endif %}
+    <label class="check">
+      <input type="checkbox" name="use_vision" id="id_use_vision" {% if form.use_vision.value %}checked{% endif %} {% if not api_key.has_user_key %}disabled{% endif %}>
+      Label images with GPT vision (requires your API key)
+    </label>
+    {% if not api_key.has_user_key %}
+      <p class="hint">GPT vision labeling requires your own API key (demo mode keeps this off).</p>
+    {% endif %}
+    <button type="submit" class="btn btn-primary" {% if not api_key.can_generate %}disabled{% endif %}>Extract brand kit</button>
+    <p class="hint">You’ll see live progress for crawl → kit → design system as it runs.</p>
+  </form>
+</section>
+
+{% if brands %}
+<section class="section">
+  <h2>Recent brands</h2>
+  <ul class="brand-grid">
+    {% for b in brands %}
+    <li>
+      <a href="{% url 'brand_detail' b.id %}">
+        {% if b.logo %}<img src="{{ b.logo.url }}" alt="" class="thumb-logo" loading="lazy">{% endif %}
+        <strong>{{ b.name|default:b.url }}</strong>
+        <span>{{ b.url }}</span>
+        <span class="swatches">
+          {% for c in b.colors|slice:":5" %}
+            <i style="background:{{ c }}" title="{{ c }}"></i>
+          {% endfor %}
+        </span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

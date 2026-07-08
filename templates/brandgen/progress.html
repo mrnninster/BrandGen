@@ -1,0 +1,93 @@
+{% extends "brandgen/base.html" %}
+{% block title %}{{ title }} · BrandGen{% endblock %}
+{% block content %}
+<section class="section progress-page" data-progress-url="{{ progress_url }}" id="progress-root">
+  <p class="kicker" id="progress-kicker">Live pipeline</p>
+  <h1 id="progress-title">{{ title }}</h1>
+  <p class="lede" id="progress-message">{{ job.message|default:"Starting…" }}</p>
+
+  <div class="progress-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ job.percent }}">
+    <div class="progress-meter-fill" id="progress-fill" style="width: {{ job.percent }}%"></div>
+  </div>
+  <p class="progress-percent"><span id="progress-percent">{{ job.percent }}</span>%</p>
+
+  <ol class="step-list" id="step-list">
+    {% for step in job.steps %}
+      <li class="step step-{{ step.status }}" data-key="{{ step.key }}">
+        <span class="step-marker" aria-hidden="true"></span>
+        <div class="step-body">
+          <strong class="step-label">{{ step.label }}</strong>
+          <span class="step-detail">{{ step.detail }}</span>
+        </div>
+      </li>
+    {% endfor %}
+  </ol>
+
+  <div class="progress-error" id="progress-error" hidden></div>
+  <p class="hint" id="progress-hint">This page updates automatically — leave it open while the pipeline runs.</p>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const root = document.getElementById("progress-root");
+  if (!root) return;
+  const url = root.dataset.progressUrl;
+  const fill = document.getElementById("progress-fill");
+  const percentEl = document.getElementById("progress-percent");
+  const messageEl = document.getElementById("progress-message");
+  const errorEl = document.getElementById("progress-error");
+  const hintEl = document.getElementById("progress-hint");
+  const meter = root.querySelector(".progress-meter");
+  let timer = null;
+
+  function renderSteps(steps) {
+    steps.forEach(function (step) {
+      const li = root.querySelector('.step[data-key="' + step.key + '"]');
+      if (!li) return;
+      li.className = "step step-" + step.status;
+      const detail = li.querySelector(".step-detail");
+      if (detail) detail.textContent = step.detail || "";
+    });
+  }
+
+  function apply(data) {
+    fill.style.width = data.percent + "%";
+    percentEl.textContent = data.percent;
+    if (meter) meter.setAttribute("aria-valuenow", data.percent);
+    messageEl.textContent = data.message || "Working…";
+    renderSteps(data.steps || []);
+
+    if (data.status === "succeeded") {
+      clearInterval(timer);
+      hintEl.textContent = "Done — redirecting…";
+      root.classList.add("is-done");
+      if (data.redirect_url) {
+        window.location.href = data.redirect_url;
+      }
+      return;
+    }
+    if (data.status === "failed") {
+      clearInterval(timer);
+      root.classList.add("is-failed");
+      errorEl.hidden = false;
+      errorEl.textContent = data.error_message || data.message || "Pipeline failed.";
+      hintEl.textContent = "Fix the issue and try again from the previous page.";
+    }
+  }
+
+  async function poll() {
+    try {
+      const res = await fetch(url, { headers: { Accept: "application/json" } });
+      if (!res.ok) return;
+      apply(await res.json());
+    } catch (err) {
+      // keep polling through transient network hiccups
+    }
+  }
+
+  poll();
+  timer = setInterval(poll, 1000);
+})();
+</script>
+{% endblock %}
