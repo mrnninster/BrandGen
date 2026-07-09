@@ -13,6 +13,16 @@ class BrandgenConfig(AppConfig):
     def ready(self) -> None:
         import logging
 
+        try:
+            self._log_startup()
+        except Exception as exc:  # noqa: BLE001 — never block deploy on startup checks
+            logging.getLogger("brandgen.startup").warning(
+                "Startup checks skipped: %s", exc
+            )
+
+    def _log_startup(self) -> None:
+        import logging
+
         from django.conf import settings
 
         log = logging.getLogger("brandgen.startup")
