@@ -41,6 +41,15 @@ class BrandgenConfig(AppConfig):
             writable,
             getattr(settings, "MEDIA_IS_EPHEMERAL", True),
         )
+        if on_render:
+            from config.media_paths import iter_media_roots
+
+            roots = iter_media_roots(
+                primary=media_root,
+                base_dir=Path(settings.BASE_DIR),
+                on_render=True,
+            )
+            log.info("Media search paths: %s", ", ".join(str(r) for r in roots))
         if on_render and getattr(settings, "MEDIA_IS_EPHEMERAL", False):
             log.warning(
                 "Using ephemeral media storage on Render (%s). "

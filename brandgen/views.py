@@ -1,10 +1,12 @@
 from django import forms
 from django.conf import settings
 from django.contrib import messages
-from django.http import FileResponse, HttpRequest, HttpResponse, HttpResponseNotFound, JsonResponse
+from django.http import FileResponse, Http404, HttpRequest, HttpResponse, HttpResponseNotFound, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
+
+from config.media_paths import iter_media_roots
 
 from brandgen.models import Brand, PipelineJob, PostSlide, SocialPost, UsageEvent
 from brandgen.services.analytics import request_context, track, track_job_started
@@ -103,6 +105,44 @@ def _resolve_slide_count(form: GenerateForm, request: HttpRequest, post_type: st
 @require_http_methods(["GET", "HEAD"])
 def health_check(request: HttpRequest) -> HttpResponse:
     return HttpResponse("ok", content_type="text/plain")
+
+
+@require_GET
+def serve_media(request: HttpRequest, path: str) -> FileResponse:
+    """Serve uploads, searching legacy Render media paths if files moved between deploys."""
+    import logging
+    import mimetypes
+    import os
+    from pathlib import Path
+
+    logger = logging.getLogger("brandgen.media")
+    on_render = os.environ.get("RENDER") == "true"
+    roots = iter_media_roots(
+        primary=Path(settings.MEDIA_ROOT),
+        base_dir=Path(settings.BASE_DIR),
+        on_render=on_render,
+    )
+
+    if ".." in Path(path).parts:
+        raise Http404("Invalid media path")
+
+    for root in roots:
+        full = (root / path).resolve()
+        try:
+            full.relative_to(root.resolve())
+        except ValueError:
+            continue
+        if full.is_file():
+            content_type, _ = mimetypes.guess_type(str(full))
+            content_type = content_type or "application/octet-stream"
+            if request.method == "HEAD":
+                response = HttpResponse(content_type=content_type)
+                response["Content-Length"] = full.stat().st_size
+                return response
+            return FileResponse(full.open("rb"), content_type=content_type)
+
+    logger.warning("Media 404: %s (searched: %s)", path, ", ".join(str(r) for r in roots))
+    raise Http404("Media file not found")
 
 
 @require_http_methods(["GET", "POST", "HEAD"])

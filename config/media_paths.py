@@ -24,8 +24,8 @@ def resolve_media_root(*, base_dir: Path, on_render: bool) -> tuple[Path, bool]:
         candidates.extend(
             [
                 Path("/var/data/media"),
-                Path("/tmp/brandgen-media"),
                 base_dir / "media",
+                Path("/tmp/brandgen-media"),
             ]
         )
     else:
@@ -55,3 +55,29 @@ def resolve_media_root(*, base_dir: Path, on_render: bool) -> tuple[Path, bool]:
 
     fallback = ordered[-1]
     return fallback, True
+
+
+def iter_media_roots(*, primary: Path, base_dir: Path, on_render: bool) -> list[Path]:
+    """All directories to search when serving a previously uploaded file."""
+    candidates: list[Path] = [primary]
+    if on_render:
+        candidates.extend(
+            [
+                Path("/var/data/media"),
+                base_dir / "media",
+                Path("/tmp/brandgen-media"),
+            ]
+        )
+    else:
+        candidates.append(base_dir / "media")
+
+    seen: set[str] = set()
+    roots: list[Path] = []
+    for path in candidates:
+        key = str(path)
+        if key in seen or not path.is_dir():
+            continue
+        seen.add(key)
+        roots.append(path)
+    return roots or [primary]
+
