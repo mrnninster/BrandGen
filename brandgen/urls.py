@@ -3,6 +3,7 @@ from django.urls import path
 from brandgen import views
 
 urlpatterns = [
+    path("healthz", views.health_check, name="health_check"),
     path("", views.home, name="home"),
     path("brands/<uuid:brand_id>/", views.brand_detail, name="brand_detail"),
     path("posts/<uuid:post_id>/", views.post_detail, name="post_detail"),

@@ -23,7 +23,13 @@ env = environ.Env(
 environ.Env.read_env(BASE_DIR / ".env")
 
 SECRET_KEY = env("DJANGO_SECRET_KEY", default="dev-insecure-secret-key")
-DEBUG = env("DJANGO_DEBUG")
+ON_RENDER = os.environ.get("RENDER") == "true"
+
+if ON_RENDER and "DJANGO_DEBUG" not in os.environ:
+    DEBUG = False
+else:
+    DEBUG = env("DJANGO_DEBUG")
+
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
 _render_host = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
@@ -129,8 +135,12 @@ STORAGES = {
 }
 
 MEDIA_URL = "media/"
-_media_root = os.environ.get("MEDIA_ROOT")
-MEDIA_ROOT = Path(_media_root) if _media_root else BASE_DIR / "media"
+if os.environ.get("MEDIA_ROOT"):
+    MEDIA_ROOT = Path(os.environ["MEDIA_ROOT"])
+elif ON_RENDER:
+    MEDIA_ROOT = Path("/var/data/media")
+else:
+    MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

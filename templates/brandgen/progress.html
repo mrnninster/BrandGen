@@ -39,7 +39,44 @@
   const errorEl = document.getElementById("progress-error");
   const hintEl = document.getElementById("progress-hint");
   const meter = root.querySelector(".progress-meter");
-  let timer = null;
+
+  let pollTimer = null;
+  let stopped = false;
+  let etag = null;
+  let lastPercent = null;
+  let unchangedPolls = 0;
+  const MIN_INTERVAL = 3000;
+  const MAX_INTERVAL = 12000;
+  const HIDDEN_INTERVAL = 15000;
+
+  function clearPollTimer() {
+    if (pollTimer !== null) {
+      clearTimeout(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  function stopPolling() {
+    stopped = true;
+    clearPollTimer();
+  }
+
+  function nextInterval(serverMs) {
+    if (document.hidden) {
+      return HIDDEN_INTERVAL;
+    }
+    let interval = serverMs || MIN_INTERVAL;
+    if (lastPercent !== null && unchangedPolls >= 2) {
+      interval = Math.max(interval, MIN_INTERVAL + unchangedPolls * 1500);
+    }
+    return Math.min(interval, MAX_INTERVAL);
+  }
+
+  function schedulePoll(delayMs) {
+    clearPollTimer();
+    if (stopped) return;
+    pollTimer = setTimeout(poll, delayMs);
+  }
 
   function renderSteps(steps) {
     steps.forEach(function (step) {
@@ -52,6 +89,13 @@
   }
 
   function apply(data) {
+    if (data.percent === lastPercent) {
+      unchangedPolls += 1;
+    } else {
+      unchangedPolls = 0;
+      lastPercent = data.percent;
+    }
+
     fill.style.width = data.percent + "%";
     percentEl.textContent = data.percent;
     if (meter) meter.setAttribute("aria-valuenow", data.percent);
@@ -59,35 +103,59 @@
     renderSteps(data.steps || []);
 
     if (data.status === "succeeded") {
-      clearInterval(timer);
+      stopPolling();
       hintEl.textContent = "Done — redirecting…";
       root.classList.add("is-done");
       if (data.redirect_url) {
         window.location.href = data.redirect_url;
       }
-      return;
+      return 0;
     }
     if (data.status === "failed") {
-      clearInterval(timer);
+      stopPolling();
       root.classList.add("is-failed");
       errorEl.hidden = false;
       errorEl.textContent = data.error_message || data.message || "Pipeline failed.";
       hintEl.textContent = "Fix the issue and try again from the previous page.";
+      return 0;
     }
+    return data.poll_interval_ms || MIN_INTERVAL;
   }
 
   async function poll() {
+    if (stopped) return;
+    const headers = { Accept: "application/json" };
+    if (etag) headers["If-None-Match"] = etag;
+
+    let serverInterval = MIN_INTERVAL;
     try {
-      const res = await fetch(url, { headers: { Accept: "application/json" } });
-      if (!res.ok) return;
-      apply(await res.json());
+      const res = await fetch(url, { headers: headers, cache: "no-store" });
+      if (res.status === 304) {
+        unchangedPolls += 1;
+        schedulePoll(nextInterval(serverInterval));
+        return;
+      }
+      if (!res.ok) {
+        schedulePoll(MAX_INTERVAL);
+        return;
+      }
+      etag = res.headers.get("ETag") || etag;
+      serverInterval = apply(await res.json()) || 0;
+      if (stopped || serverInterval === 0) return;
     } catch (err) {
-      // keep polling through transient network hiccups
+      schedulePoll(MAX_INTERVAL);
+      return;
     }
+    schedulePoll(nextInterval(serverInterval));
   }
 
+  document.addEventListener("visibilitychange", function () {
+    if (stopped) return;
+    clearPollTimer();
+    schedulePoll(document.hidden ? HIDDEN_INTERVAL : MIN_INTERVAL);
+  });
+
   poll();
-  timer = setInterval(poll, 1000);
 })();
 </script>
 {% endblock %}

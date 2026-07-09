@@ -100,8 +100,15 @@ def _resolve_slide_count(form: GenerateForm, request: HttpRequest, post_type: st
     return clamp_slide_count(raw, using_user_key=using_user)
 
 
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET", "HEAD"])
+def health_check(request: HttpRequest) -> HttpResponse:
+    return HttpResponse("ok", content_type="text/plain")
+
+
+@require_http_methods(["GET", "POST", "HEAD"])
 def home(request: HttpRequest) -> HttpResponse:
+    if request.method == "HEAD":
+        return HttpResponse()
     form = CrawlForm(request.POST or None)
     brands = Brand.objects.all()[:12]
     key_status = session_key_status(request.session)
@@ -365,9 +372,34 @@ def job_progress(request: HttpRequest, job_id) -> HttpResponse:
 
 
 @require_GET
-def job_progress_api(request: HttpRequest, job_id) -> JsonResponse:
-    job = get_object_or_404(PipelineJob, pk=job_id)
-    return JsonResponse(job.to_progress_dict())
+def job_progress_api(request: HttpRequest, job_id) -> JsonResponse | HttpResponse:
+    job = get_object_or_404(
+        PipelineJob.objects.only(
+            "id",
+            "job_type",
+            "status",
+            "percent",
+            "current_step",
+            "message",
+            "steps",
+            "error_message",
+            "brand_id",
+            "post_id",
+            "updated_at",
+        ),
+        pk=job_id,
+    )
+    etag = job.progress_etag()
+    if request.headers.get("If-None-Match") == etag:
+        response = HttpResponse(status=304)
+        response["ETag"] = etag
+        response["Cache-Control"] = "no-cache"
+        return response
+
+    response = JsonResponse(job.to_progress_dict())
+    response["ETag"] = etag
+    response["Cache-Control"] = "no-cache"
+    return response
 
 
 @require_GET

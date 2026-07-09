@@ -202,7 +202,30 @@ class PipelineJob(models.Model):
             "brand_id": str(self.brand_id) if self.brand_id else None,
             "post_id": str(self.post_id) if self.post_id else None,
             "redirect_url": self.redirect_url(),
+            "poll_interval_ms": self.suggested_poll_interval_ms(),
+            "updated_at": self.updated_at.isoformat(),
         }
+
+    def suggested_poll_interval_ms(self) -> int:
+        """Hint for the progress page — longer intervals as jobs run."""
+        if self.status in {self.Status.SUCCEEDED, self.Status.FAILED}:
+            return 0
+        age_seconds = (timezone.now() - self.updated_at).total_seconds()
+        if self.status == self.Status.QUEUED:
+            return 3000
+        if age_seconds > 120:
+            return 10000
+        if age_seconds > 45:
+            return 7000
+        if age_seconds > 15:
+            return 5000
+        return 3000
+
+    def progress_etag(self) -> str:
+        return (
+            f'"{self.updated_at.timestamp():.6f}-'
+            f'{self.status}-{self.percent}-{self.current_step}"'
+        )
 
     def redirect_url(self) -> str | None:
         if self.status != self.Status.SUCCEEDED:

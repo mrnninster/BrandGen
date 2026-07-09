@@ -9,12 +9,11 @@ urlpatterns = [
 ]
 
 if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATICFILES_DIRS[0])
-elif settings.MEDIA_ROOT != settings.BASE_DIR / "media":
-    # PoC: serve uploads from Render persistent disk when DEBUG=False.
-    urlpatterns += static(
-        settings.MEDIA_URL,
-        document_root=settings.MEDIA_ROOT,
-        insecure=True,
-    )
+
+# PoC: serve uploaded files from MEDIA_ROOT (Render disk or local).
+urlpatterns += static(
+    settings.MEDIA_URL,
+    document_root=settings.MEDIA_ROOT,
+    insecure=not settings.DEBUG,
+)

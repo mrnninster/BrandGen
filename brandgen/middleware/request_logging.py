@@ -7,7 +7,7 @@ import time
 
 logger = logging.getLogger("brandgen.request")
 
-_SKIP_PREFIXES = ("/static/", "/favicon.ico")
+_SKIP_PREFIXES = ("/static/", "/favicon.ico", "/api/jobs/", "/healthz")
 
 
 class RequestLoggingMiddleware:
