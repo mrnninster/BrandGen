@@ -1,6 +1,9 @@
 import os
+from pathlib import Path
 
 from django.apps import AppConfig
+
+RENDER_MEDIA_ROOT = Path("/var/data/media")
 
 
 class BrandgenConfig(AppConfig):
@@ -13,22 +16,43 @@ class BrandgenConfig(AppConfig):
         from django.conf import settings
 
         log = logging.getLogger("brandgen.startup")
-        media_root = settings.MEDIA_ROOT
-        try:
-            media_root.mkdir(parents=True, exist_ok=True)
-            log.info("Media root ready: %s (writable=%s)", media_root, os.access(media_root, os.W_OK))
-        except OSError as exc:
-            log.error("Cannot create media root %s: %s", media_root, exc)
+        media_root = Path(settings.MEDIA_ROOT)
+        on_render = os.environ.get("RENDER") == "true"
+
+        if media_root.exists():
+            log.info(
+                "Media root ready: %s (writable=%s)",
+                media_root,
+                os.access(media_root, os.W_OK),
+            )
+        else:
+            try:
+                media_root.mkdir(parents=True, exist_ok=True)
+                log.info(
+                    "Media root ready: %s (writable=%s)",
+                    media_root,
+                    os.access(media_root, os.W_OK),
+                )
+            except OSError as exc:
+                if on_render and media_root == RENDER_MEDIA_ROOT:
+                    log.warning(
+                        "Media root %s not mounted yet (%s) — expected during build; "
+                        "disk mounts at runtime on Render.",
+                        media_root,
+                        exc,
+                    )
+                else:
+                    log.error("Cannot create media root %s: %s", media_root, exc)
 
         db_engine = settings.DATABASES["default"].get("ENGINE", "")
         log.info(
             "BrandGen ready debug=%s on_render=%s db=%s media=%s",
             settings.DEBUG,
-            os.environ.get("RENDER") == "true",
+            on_render,
             db_engine.rsplit(".", maxsplit=1)[-1],
             media_root,
         )
-        if os.environ.get("RENDER") == "true" and media_root != Path("/var/data/media"):
+        if on_render and media_root != RENDER_MEDIA_ROOT:
             log.warning(
                 "Render deploy should use MEDIA_ROOT=/var/data/media with a mounted disk; "
                 "current path may be ephemeral: %s",
