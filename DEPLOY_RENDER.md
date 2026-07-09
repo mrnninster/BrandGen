@@ -38,7 +38,7 @@ Render runs Django as a **long-lived web service** — background threads, Postg
    |---|---|
    | Root Directory | `ivan_demo` (if needed) |
    | Build Command | `./build.sh` |
-   | Start Command | `gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 300` |
+   | Start Command | `gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --worker-class gthread --workers 1 --threads 4 --timeout 300 --access-logfile - --error-logfile - --log-level info` |
 
 4. **Environment variables**:
 
@@ -51,10 +51,39 @@ Render runs Django as a **long-lived web service** — background threads, Postg
    | `ANALYTICS_DASHBOARD_TOKEN` | Random secret |
    | `DEMO_MAX_SLIDES` | `1` |
    | `MEDIA_ROOT` | `/var/data/media` |
+   | `LOG_LEVEL` | `INFO` (use `DEBUG` temporarily when troubleshooting) |
 
 5. **Disks** → Add disk, mount path `/var/data/media`, 1 GB (for logos and generated images).
 
 6. Deploy.
+
+## Logs and debugging
+
+**Important:** The Postgres service logs (connection received / disconnection) are **not your app logs**. They only show database health checks every few seconds — that is normal.
+
+Application logs live on the **Web Service**:
+
+1. Render Dashboard → **BrandGen** (web service, not Postgres)
+2. **Logs** tab
+3. Filter for lines like:
+   - `INFO brandgen.startup` — app boot, media path, DB engine
+   - `INFO brandgen.request` — every HTTP request
+   - `INFO brandgen.services.jobs` — job start / complete / failure
+   - `INFO brandgen.services.progress` — each pipeline step
+   - `ERROR` — failures with full stack traces
+
+Set `LOG_LEVEL=DEBUG` in Environment Variables for more detail, then redeploy.
+
+When a job appears stuck, look for:
+
+| Log pattern | Meaning |
+|---|---|
+| `Queueing background thread` then `Job … step begin: crawl` | Job started OK |
+| Last step is `design_system` or `slide_0` with no follow-up | Likely OpenAI timeout or API key issue |
+| `Cannot create media root` | Disk not mounted — add `/var/data/media` disk |
+| No job logs at all after crawl submit | Thread never started — check web service logs, not Postgres |
+
+Also check **Admin → Pipeline jobs** for `error_message` on failed jobs.
 
 ## Already configured in this repo
 

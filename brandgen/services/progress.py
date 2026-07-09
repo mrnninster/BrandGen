@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from brandgen.models import PipelineJob
+
+logger = logging.getLogger(__name__)
 
 # Step keys → human labels for the ingest flow
 INGEST_STEPS: list[tuple[str, str]] = [
@@ -43,6 +46,7 @@ class JobProgress:
         self.job = job
 
     def start(self) -> None:
+        logger.info("Job %s started (%s)", self.job.id, self.job.job_type)
         self.job.status = PipelineJob.Status.RUNNING
         self.job.percent = 0
         self.job.message = "Starting…"
@@ -60,6 +64,7 @@ class JobProgress:
         self.job.message = detail or next(
             (s["label"] for s in steps if s["key"] == key), key
         )
+        logger.info("Job %s step begin: %s — %s", self.job.id, key, self.job.message)
         self.job.save(
             update_fields=["steps", "current_step", "message", "updated_at"]
         )
@@ -100,6 +105,7 @@ class JobProgress:
         )
 
     def succeed(self, *, brand=None, post=None, message: str = "Done") -> None:
+        logger.info("Job %s succeeded: %s", self.job.id, message)
         steps = list(self.job.steps or [])
         for step in steps:
             if step["status"] in {"pending", "running"}:
@@ -119,6 +125,7 @@ class JobProgress:
         self.job.save(update_fields=update)
 
     def fail(self, error: str) -> None:
+        logger.error("Job %s failed: %s", self.job.id, error)
         self.job.status = PipelineJob.Status.FAILED
         self.job.error_message = error
         self.job.message = error[:400]

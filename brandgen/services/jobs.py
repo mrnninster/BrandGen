@@ -78,6 +78,7 @@ def _run_ingest(job_id) -> None:
     job = None
     try:
         job = PipelineJob.objects.get(pk=job_id)
+        logger.info("Ingest job %s running for url=%s", job_id, (job.params or {}).get("url"))
         progress = JobProgress(job)
         params = job.params or {}
         api_key, source = resolve_api_key(job_params=params)
@@ -90,6 +91,7 @@ def _run_ingest(job_id) -> None:
         )
         job.refresh_from_db()
         track_job_finished(job, success=True)
+        logger.info("Ingest job %s completed", job_id)
     except Exception as exc:  # noqa: BLE001
         logger.exception("Ingest job %s failed", job_id)
         try:
@@ -107,8 +109,14 @@ def _run_generate(job_id) -> None:
     job = None
     try:
         job = PipelineJob.objects.get(pk=job_id)
-        progress = JobProgress(job)
         params = job.params or {}
+        logger.info(
+            "Generate job %s running brand=%s slides=%s",
+            job_id,
+            params.get("brand_id"),
+            params.get("slide_count"),
+        )
+        progress = JobProgress(job)
         api_key, source = resolve_api_key(job_params=params)
         slide_count = clamp_slide_count(
             int(params.get("slide_count") or 1),
@@ -127,6 +135,7 @@ def _run_generate(job_id) -> None:
         )
         job.refresh_from_db()
         track_job_finished(job, success=True)
+        logger.info("Generate job %s completed", job_id)
     except Exception as exc:  # noqa: BLE001
         logger.exception("Generate job %s failed", job_id)
         try:
@@ -147,10 +156,12 @@ def _run_generate(job_id) -> None:
 def start_job_thread(job: PipelineJob) -> None:
     """Run pipeline jobs in a background thread."""
     target = _run_ingest if job.job_type == PipelineJob.JobType.INGEST else _run_generate
+    logger.info("Queueing background thread for %s job %s", job.job_type, job.id)
     thread = threading.Thread(
         target=target,
         args=(job.id,),
         name=f"brandgen-{job.job_type}-{job.id}",
-        daemon=True,
+        daemon=False,
     )
     thread.start()
+    logger.info("Background thread started for job %s (alive=%s)", job.id, thread.is_alive())
