@@ -9,6 +9,8 @@ from pathlib import Path
 
 import environ
 
+from config.media_paths import resolve_media_root
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 env = environ.Env(
@@ -135,12 +137,7 @@ STORAGES = {
 }
 
 MEDIA_URL = "media/"
-if os.environ.get("MEDIA_ROOT"):
-    MEDIA_ROOT = Path(os.environ["MEDIA_ROOT"])
-elif ON_RENDER:
-    MEDIA_ROOT = Path("/var/data/media")
-else:
-    MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_ROOT, MEDIA_IS_EPHEMERAL = resolve_media_root(base_dir=BASE_DIR, on_render=ON_RENDER)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

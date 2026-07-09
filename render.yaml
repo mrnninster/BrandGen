@@ -42,8 +42,6 @@ services:
         generateValue: true
       - key: DEMO_MAX_SLIDES
         value: "1"
-      - key: MEDIA_ROOT
-        value: /var/data/media
       - key: OPENAI_IMAGE_MODEL
         value: gpt-image-1
       - key: OPENAI_TEXT_MODEL

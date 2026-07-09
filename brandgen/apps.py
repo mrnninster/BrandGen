@@ -3,8 +3,6 @@ from pathlib import Path
 
 from django.apps import AppConfig
 
-RENDER_MEDIA_ROOT = Path("/var/data/media")
-
 
 class BrandgenConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
@@ -28,43 +26,34 @@ class BrandgenConfig(AppConfig):
         log = logging.getLogger("brandgen.startup")
         media_root = Path(settings.MEDIA_ROOT)
         on_render = os.environ.get("RENDER") == "true"
+        writable = media_root.exists() and os.access(media_root, os.W_OK)
 
-        if media_root.exists():
-            log.info(
-                "Media root ready: %s (writable=%s)",
-                media_root,
-                os.access(media_root, os.W_OK),
-            )
-        else:
+        if not writable:
             try:
                 media_root.mkdir(parents=True, exist_ok=True)
-                log.info(
-                    "Media root ready: %s (writable=%s)",
-                    media_root,
-                    os.access(media_root, os.W_OK),
-                )
+                writable = os.access(media_root, os.W_OK)
             except OSError as exc:
-                if on_render and media_root == RENDER_MEDIA_ROOT:
-                    log.warning(
-                        "Media root %s not mounted yet (%s) — expected during build; "
-                        "disk mounts at runtime on Render.",
-                        media_root,
-                        exc,
-                    )
-                else:
-                    log.error("Cannot create media root %s: %s", media_root, exc)
+                log.error("Media root not writable %s: %s", media_root, exc)
+
+        log.info(
+            "Media root: %s (writable=%s ephemeral=%s)",
+            media_root,
+            writable,
+            getattr(settings, "MEDIA_IS_EPHEMERAL", True),
+        )
+        if on_render and getattr(settings, "MEDIA_IS_EPHEMERAL", False):
+            log.warning(
+                "Using ephemeral media storage on Render (%s). "
+                "Uploads survive restarts but are cleared on redeploy. "
+                "For persistence, attach a disk at /var/data/media (paid plan) "
+                "or use S3/R2.",
+                media_root,
+            )
 
         db_engine = settings.DATABASES["default"].get("ENGINE", "")
         log.info(
-            "BrandGen ready debug=%s on_render=%s db=%s media=%s",
+            "BrandGen ready debug=%s on_render=%s db=%s",
             settings.DEBUG,
             on_render,
             db_engine.rsplit(".", maxsplit=1)[-1],
-            media_root,
         )
-        if on_render and media_root != RENDER_MEDIA_ROOT:
-            log.warning(
-                "Render deploy should use MEDIA_ROOT=/var/data/media with a mounted disk; "
-                "current path may be ephemeral: %s",
-                media_root,
-            )
