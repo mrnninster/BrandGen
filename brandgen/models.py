@@ -237,6 +237,42 @@ class PipelineJob(models.Model):
         return None
 
 
+class PipelineSettings(models.Model):
+    """Singleton admin settings for image generation behavior."""
+
+    ocr_enabled = models.BooleanField(
+        default=True,
+        help_text=(
+            "When enabled, OCR checks AI-rendered text and may overlay headlines. "
+            "When disabled, images are generated without text and only the brand logo is composited."
+        ),
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Pipeline settings"
+        verbose_name_plural = "Pipeline settings"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+        from brandgen.services.pipeline_settings import clear_pipeline_settings_cache
+
+        clear_pipeline_settings_cache()
+
+    def delete(self, *args, **kwargs):
+        return
+
+    @classmethod
+    def load(cls) -> "PipelineSettings":
+        obj, _ = cls.objects.get_or_create(pk=1, defaults={"ocr_enabled": True})
+        return obj
+
+    def __str__(self) -> str:
+        state = "OCR on" if self.ocr_enabled else "OCR off (logo only)"
+        return f"Pipeline settings ({state})"
+
+
 class UsageEvent(models.Model):
     """Anonymous usage analytics — no API keys, no user accounts."""
 

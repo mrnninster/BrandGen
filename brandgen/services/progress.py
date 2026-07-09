@@ -21,13 +21,14 @@ INGEST_STEPS: list[tuple[str, str]] = [
 ]
 
 
-def generate_step_defs(slide_count: int) -> list[tuple[str, str]]:
+def generate_step_defs(slide_count: int, *, ocr_enabled: bool = True) -> list[tuple[str, str]]:
     steps: list[tuple[str, str]] = [
         ("captions", "Write captions & headlines"),
     ]
+    overlay_label = "OCR check & composite" if ocr_enabled else "Composite logo"
     for i in range(slide_count):
         steps.append((f"slide_{i}", f"Generate image · slide {i + 1}/{slide_count}"))
-        steps.append((f"overlay_{i}", f"OCR check & composite · slide {i + 1}"))
+        steps.append((f"overlay_{i}", f"{overlay_label} · slide {i + 1}"))
     steps.append(("complete", "Post ready"))
     return steps
 

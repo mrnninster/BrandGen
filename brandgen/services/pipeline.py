@@ -22,6 +22,7 @@ from brandgen.services.openai_client import (
     label_image_with_vision,
     synthesize_design_system,
 )
+from brandgen.services.pipeline_settings import is_ocr_enabled
 from brandgen.services.progress import JobProgress
 
 logger = logging.getLogger(__name__)
@@ -333,6 +334,7 @@ def generate_post(
         accent = (design.get("color_roles") or {}).get("accent") or brand.accent_color
         text_color = (design.get("color_roles") or {}).get("text") or "#ffffff"
         logo_path = brand.logo.path if brand.logo else None
+        ocr_enabled = is_ocr_enabled()
 
         for idx in range(slide_count):
             meta = slides_meta[idx]
@@ -348,6 +350,7 @@ def generate_post(
                 platform=platform,
                 post_type=post_type,
                 refine_instruction=refine_instruction,
+                force_no_text=not ocr_enabled,
             )
             if idx > 0:
                 prompt += (
@@ -363,68 +366,82 @@ def generate_post(
 
             raw = generate_image_bytes(prompt, api_key=api_key)
             pil = bytes_to_pil(raw)
+            used_prompt = prompt
 
             if progress:
                 progress.complete(f"slide_{idx}", f"Slide {idx + 1} base image ready")
-                progress.begin(
-                    f"overlay_{idx}",
-                    f"OCR-checking text on slide {idx + 1}",
-                )
 
-            quality = evaluate_rendered_text(pil, headline=headline, brand_name=brand.name)
-            include_headline = True
-            overlay_mode = "headline_overlay"
-            used_prompt = prompt
-
-            if quality.text_is_usable:
-                # AI already rendered readable copy — logo only, avoid double text
+            if not ocr_enabled:
+                if progress:
+                    progress.begin(
+                        f"overlay_{idx}",
+                        f"Compositing logo on slide {idx + 1}",
+                    )
                 include_headline = False
                 overlay_mode = "logo_only"
-                if progress:
-                    progress.begin(
-                        f"overlay_{idx}",
-                        f"Usable AI text ({quality.reason}) — logo overlay only",
-                    )
-            elif quality.has_text and not quality.text_is_usable:
-                # Garbled / nonsense text → regenerate text-free, then overlay headline
-                if progress:
-                    progress.begin(
-                        f"overlay_{idx}",
-                        f"OCR text unusable ({quality.reason}) — regenerating without text",
-                    )
-                no_text_prompt = build_image_prompt(
-                    brand_name=brand.name,
-                    design_system=design,
-                    headline=headline,
-                    body=body,
-                    slide_index=idx,
-                    slide_count=slide_count,
-                    platform=platform,
-                    post_type=post_type,
-                    refine_instruction=refine_instruction,
-                    force_no_text=True,
-                )
-                if idx > 0:
-                    no_text_prompt += (
-                        "\nKeep visual continuity with previous slides — same motifs, "
-                        "palette roles, lighting, and geometric language."
-                    )
-                raw = generate_image_bytes(no_text_prompt, api_key=api_key)
-                pil = bytes_to_pil(raw)
-                used_prompt = no_text_prompt
-                include_headline = True
-                overlay_mode = "regenerated_no_text"
-                if progress:
-                    progress.begin(
-                        f"overlay_{idx}",
-                        f"Compositing headline overlay on text-free slide {idx + 1}",
-                    )
+                ocr_text = ""
+                ocr_reason = "ocr_disabled"
             else:
                 if progress:
                     progress.begin(
                         f"overlay_{idx}",
-                        f"No usable AI text — compositing headline on slide {idx + 1}",
+                        f"OCR-checking text on slide {idx + 1}",
                     )
+
+                quality = evaluate_rendered_text(pil, headline=headline, brand_name=brand.name)
+                include_headline = True
+                overlay_mode = "headline_overlay"
+
+                if quality.text_is_usable:
+                    include_headline = False
+                    overlay_mode = "logo_only"
+                    if progress:
+                        progress.begin(
+                            f"overlay_{idx}",
+                            f"Usable AI text ({quality.reason}) — logo overlay only",
+                        )
+                elif quality.has_text and not quality.text_is_usable:
+                    if progress:
+                        progress.begin(
+                            f"overlay_{idx}",
+                            f"OCR text unusable ({quality.reason}) — regenerating without text",
+                        )
+                    no_text_prompt = build_image_prompt(
+                        brand_name=brand.name,
+                        design_system=design,
+                        headline=headline,
+                        body=body,
+                        slide_index=idx,
+                        slide_count=slide_count,
+                        platform=platform,
+                        post_type=post_type,
+                        refine_instruction=refine_instruction,
+                        force_no_text=True,
+                    )
+                    if idx > 0:
+                        no_text_prompt += (
+                            "\nKeep visual continuity with previous slides — same motifs, "
+                            "palette roles, lighting, and geometric language."
+                        )
+                    raw = generate_image_bytes(no_text_prompt, api_key=api_key)
+                    pil = bytes_to_pil(raw)
+                    used_prompt = no_text_prompt
+                    include_headline = True
+                    overlay_mode = "regenerated_no_text"
+                    if progress:
+                        progress.begin(
+                            f"overlay_{idx}",
+                            f"Compositing headline overlay on text-free slide {idx + 1}",
+                        )
+                else:
+                    if progress:
+                        progress.begin(
+                            f"overlay_{idx}",
+                            f"No usable AI text — compositing headline on slide {idx + 1}",
+                        )
+
+                ocr_text = quality.raw_text[:2000]
+                ocr_reason = quality.reason
 
             overlay_text = (
                 "#ffffff"
@@ -449,8 +466,8 @@ def generate_post(
                 body=body,
                 generation_prompt=used_prompt,
                 overlay_mode=overlay_mode,
-                ocr_text=quality.raw_text[:2000],
-                ocr_reason=quality.reason,
+                ocr_text=ocr_text,
+                ocr_reason=ocr_reason,
             )
             slide.image.save(f"{post.id}_{idx}.jpg", ContentFile(jpeg), save=True)
 

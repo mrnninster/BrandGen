@@ -11,6 +11,7 @@ from brandgen.models import Brand, PipelineJob, SocialPost
 from brandgen.services.analytics import track_job_finished
 from brandgen.services.api_keys import clamp_slide_count, resolve_api_key
 from brandgen.services.pipeline import generate_post, ingest_website
+from brandgen.services.pipeline_settings import is_ocr_enabled
 from brandgen.services.progress import (
     INGEST_STEPS,
     JobProgress,
@@ -67,7 +68,7 @@ def create_generate_job(
         status=PipelineJob.Status.QUEUED,
         brand=brand,
         post=post,
-        steps=init_steps(generate_step_defs(slide_count)),
+        steps=init_steps(generate_step_defs(slide_count, ocr_enabled=is_ocr_enabled())),
         message="Queued — waiting to generate",
         params=merged,
     )

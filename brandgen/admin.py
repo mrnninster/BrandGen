@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.shortcuts import render
 from django.urls import path, reverse
 
-from brandgen.models import Brand, PipelineJob, PostSlide, SiteImage, SocialPost, UsageEvent
+from brandgen.models import Brand, PipelineJob, PostSlide, SiteImage, SocialPost, UsageEvent, PipelineSettings
 from brandgen.services.usage_stats import dashboard_stats
 
 
@@ -124,3 +124,32 @@ class UsageEventAdmin(admin.ModelAdmin):
 admin.site.site_header = "BrandGen Admin"
 admin.site.site_title = "BrandGen Admin"
 admin.site.index_title = "Site administration"
+
+
+@admin.register(PipelineSettings)
+class PipelineSettingsAdmin(admin.ModelAdmin):
+    fieldsets = (
+        (
+            "Image generation",
+            {
+                "fields": ("ocr_enabled", "updated_at"),
+                "description": (
+                    "Disable OCR to skip text-quality checks and headline overlays. "
+                    "Generated slides will be text-free with only the brand logo composited."
+                ),
+            },
+        ),
+    )
+    readonly_fields = ("updated_at",)
+
+    def has_add_permission(self, request):
+        return not PipelineSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        from django.shortcuts import redirect
+
+        settings = PipelineSettings.load()
+        return redirect("admin:brandgen_pipelinesettings_change", settings.pk)
