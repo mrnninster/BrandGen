@@ -128,10 +128,22 @@ gunicorn config.wsgi:application --bind 127.0.0.1:8000 --timeout 300
 https://<your-service>.onrender.com/usage/?token=YOUR_ANALYTICS_DASHBOARD_TOKEN
 ```
 
-Events are also visible in Django admin (`/admin/`) after creating a superuser:
+Events are also visible in Django admin (`/admin/`) after creating a superuser.
+
+### Option A — Environment variables (easiest on Render)
+
+Add to the web service **Environment** tab, then redeploy:
+
+| Variable | Example |
+|---|---|
+| `DJANGO_SUPERUSER_USERNAME` | `admin` |
+| `DJANGO_SUPERUSER_EMAIL` | `you@example.com` |
+| `DJANGO_SUPERUSER_PASSWORD` | strong random password |
+
+`build.sh` runs `createsuperuser --noinput` after migrate. If the user already exists, the build continues.
+
+### Option B — Render Shell
 
 ```bash
 python manage.py createsuperuser
 ```
-
-Run via Render Shell or locally against the production `DATABASE_URL`.
